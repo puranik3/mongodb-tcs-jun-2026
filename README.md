@@ -15,6 +15,11 @@ The guide mixes explanation with exercises. Participants should run each query, 
 
 # Setup and Verification
 
+## Import dataset
+Unzip the dataset files and import them into MongoDB using `mongoimport`. For example:
+
+```bash
+
 ## 1. Start MongoDB Shell
 
 ```bash
