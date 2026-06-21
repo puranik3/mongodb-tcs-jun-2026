@@ -1656,11 +1656,31 @@ db.products.find({
 }).sort({ price: 1 }).explain("executionStats")
 ```
 
+Add this index if it does not exist:
+
+```js
+db.products.createIndex({ category: 1 })
+```
+
+Run again:
+
+```js
+db.products.find({
+  category: "electronics"
+}).sort({ price: 1 }).explain("executionStats")
+```
+
 Reflection:
 
 1. Did the plan contain a `SORT` stage before the index?
-2. Did the index remove or reduce sorting work?
-3. Why is `{ category: 1, price: 1 }` better than `{ price: 1, category: 1 }` for this query?
+2. Any rejected plans? If so, why?
+3. Did the index remove or reduce sorting work?
+4. Why is `{ category: 1, price: 1 }` better than `{ price: 1, category: 1 }` for this query?
+5. Why is `{ category: 1, price: 1 }` better than `{ category: 1 }` for this query? Is the latter even needed?
+
+- Use ESR rule to reason about compound index field order. We are not interested in comparing prices across different categories. We are interested in comparing prices within the same category. The query filters on `category` and sorts on `price`. So the index should have `category` first, then `price`. This allows MongoDB to find documents by category and read them already sorted by price, avoiding an in-memory sort.
+
+- A index with a prefix of fields in another index, like `{ category: 1 }`, is not usually needed if the compound index already covers the query.
 
 ---
 
@@ -1668,7 +1688,7 @@ Reflection:
 
 ### Concept
 
-Indexes improve read performance but have costs.
+Indexes improve read performance but have costs. When you insert/update/delete a document, MongoDB makes changes to the relevant indexes to keep them in sync with their collection!
 
 Indexes:
 
@@ -1706,6 +1726,74 @@ Reflection:
 2. Is `{ category: 1 }` always necessary?
 3. When might keeping the smaller index still be useful?
 
+### When might keeping the smaller index still be useful?
+
+Keep the smaller index if `category`-only queries are very frequent and performance-sensitive.
+
+A smaller index can be useful because it is:
+
+```text
+smaller on disk
+lighter in memory
+faster to scan
+cheaper for simple category-only lookups
+```
+
+For example:
+
+```js
+db.products.find({ category: "electronics" })
+```
+
+may be slightly cheaper with:
+
+```js
+{ category: 1 }
+```
+
+than with:
+
+```js
+{ category: 1, price: 1, rating: -1 }
+```
+
+because the larger index has more data per entry.
+
+### Practical takeaway
+
+Do not blindly delete smaller prefix indexes.
+
+Usually:
+
+```js
+{ category: 1 }
+```
+
+is redundant if you already have:
+
+```js
+{ category: 1, price: 1 }
+```
+
+But keep it if measurements show it is useful for a major query pattern.
+
+Confirm using:
+
+```js
+db.products.find({ category: "electronics" })
+  .explain("executionStats")
+```
+
+and compare with `.hint()`:
+
+```js
+.hint({ category: 1 })
+
+.hint({ category: 1, price: 1 })
+
+.hint({ category: 1, price: 1, rating: -1 })
+```
+
 ---
 
 ## 13. Performance Anti-patterns
@@ -1737,6 +1825,80 @@ Reflection:
 1. Did this use an index effectively?
 2. How many documents were examined?
 3. Would a text index be better for search-like functionality?
+
+---
+
+## Session 1 Practice Questions
+
+### Q1. A collection has 5 million documents. A query filters on a field that has no index. What is the most likely execution behavior?
+
+A. MongoDB scans all or many collection documents
+B. MongoDB scans only matching index entries
+C. MongoDB skips query planning entirely
+D. MongoDB automatically creates an index
+
+### Q2. Which `explain()` mode is most useful when you want actual values such as documents examined, keys examined, and number of documents returned?
+
+A. `queryPlanner`
+B. `executionStats`
+C. `indexOnly`
+D. `schemaStats`
+
+### Q3. A query on `email` returns one document from a million users, while a query on `status` returns 600,000 documents. Which statement is most accurate?
+
+A. `status` is more selective than `email`
+B. Both fields have equal selectivity
+C. `email` is more selective than `status`
+D. Selectivity only depends on index size
+
+### Q4. An application frequently runs: find invoices for one customer, sorted by invoice date descending. Which index is generally best?
+
+A. `{ invoiceDate: -1, customerId: 1 }`
+B. `{ amount: 1, customerId: 1 }`
+C. `{ invoiceDate: 1, amount: 1 }`
+D. `{ customerId: 1, invoiceDate: -1 }`
+
+### Q5. A `posts` collection has a `tags` array. An index is created on `{ tags: 1 }`. Why is this called a multikey index?
+
+A. It indexes multiple collections together
+B. One array document can create multiple index entries
+C. It requires multiple shard keys
+D. It stores multiple indexes in memory only
+
+### Q6. A blog platform needs basic keyword search across `title` and `body`. Which index type is most appropriate?
+
+A. Hashed index
+B. TTL index
+C. Text index
+D. Unique index
+
+### Q7. A collection stores activity events by `sessionId`. Queries usually search for one exact `sessionId`. Which index can help equality lookup and shard distribution?
+
+A. `{ sessionId: "text" }`
+B. `{ sessionId: -1, time: 1 }` only
+C. `{ sessionId: "ttl" }`
+D. `{ sessionId: "hashed" }`
+
+### Q8. A query filters by `status` and returns only `email`, excluding `_id`. The index contains `status` and `email`. What is the likely benefit?
+
+A. MongoDB must fetch every full document
+B. MongoDB ignores the projection
+C. MongoDB may answer using only the index
+D. MongoDB converts it to text search
+
+### Q9. An API list endpoint needs only `name`, `price`, and `rating`, but documents contain many large fields. Why use projection?
+
+A. To delete unused fields permanently
+B. To reduce returned fields and network payload
+C. To force a unique index
+D. To disable query planning
+
+### Q10. Why should developers avoid creating indexes on every field?
+
+A. Indexes prevent queries from using filters
+B. Indexes disable document validation
+C. Indexes remove the `_id` field
+D. Indexes increase storage and write maintenance cost
 
 ---
 
@@ -2597,6 +2759,80 @@ Reflection:
 2. What is wrong with Design B?
 3. What is wrong with Design C?
 4. How would you redesign each one?
+
+---
+
+## Session 2 Practice Questions
+
+### Q1. Before designing MongoDB collections, what should you identify first?
+
+A. Application query patterns
+B. Alphabetical field order
+C. Number of developers
+D. UI color theme
+
+### Q2. A small user preferences object is always displayed with the user profile and updated with the user. Which design is generally suitable?
+
+A. Store preferences in millions of separate collections
+B. Use a text index for preferences
+C. Embed preferences inside the user document
+D. Store preferences only in application memory
+
+### Q3. A news article can receive thousands of comments over time. Which design is usually safer?
+
+A. Embed all comments forever in the article document
+B. Store comments in the article title field
+C. Use one collection per comment
+D. Store comments in a separate collection with article references
+
+### Q4. A customer can place many orders. Orders are queried independently and may grow over time. Which relationship modeling choice is generally better?
+
+A. Embed all orders forever inside customer
+B. Store orders separately with customer reference
+C. Store customers inside every order item only
+D. Avoid storing customer identity
+
+### Q5. An order stores the product name and price at purchase time. Why can this be useful?
+
+A. It prevents all future product updates
+B. It removes the need for indexes
+C. It preserves historical order details
+D. It guarantees product stock availability
+
+### Q6. Which design is most likely to cause document growth problems?
+
+A. Embedding all user activity events forever
+B. Embedding one small address object
+C. Storing a fixed settings object
+D. Keeping a small status field
+
+### Q7. Products in different categories have different specifications. Which pattern helps model variable attributes consistently?
+
+A. Outlier Pattern
+B. Bucket Pattern
+C. Schema Versioning Pattern
+D. Attribute Pattern
+
+### Q8. A system records millions of temperature readings per device per day. Which pattern can group readings into bounded documents?
+
+A. Unique Index Pattern
+B. Bucket Pattern
+C. Text Search Pattern
+D. Over-normalization Pattern
+
+### Q9. A product page usually shows only the latest three reviews, while all reviews remain queryable separately. Which pattern fits this design?
+
+A. Subset Pattern
+B. Hashed Pattern
+C. Parallel Array Pattern
+D. Sparse Document Pattern
+
+### Q10. Which field is usually a poor shard key candidate?
+
+A. A high-cardinality user identifier
+B. A low-cardinality field like department
+C. A frequently queried customer identifier
+D. A well-distributed event identifier
 
 ---
 
