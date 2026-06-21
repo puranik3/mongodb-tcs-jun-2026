@@ -15,12 +15,34 @@ The guide mixes explanation with exercises. Participants should run each query, 
 
 # Setup and Verification
 
-## Import dataset
-Unzip the dataset files and import them into MongoDB using `mongoimport`. For example:
+## 1. Import dataset
+- Unzip `supplied-files/datasets.zip` file
+- If importing to an Atlas cluster, set the `MONGOSH_URI` environment variable to your MongoDB Atlas connection string before running the script. No special setup is needed for local MongoDB running on the standar port 27017.
+- Linux/Mac
+```bash
+export MONGOSH_URI="mongodb+srv://<username>:<password>@<cluster-url>"
+```
+- Windows
+```cmd
+setx MONGOSH_URI mongodb+srv://<username>:<password>@<cluster-url>
+```
+- Make sure you have the `mongoimport` tool installed and available in your PATH. You can check by running:
 
 ```bash
+mongoimport --version
+```
 
-## 1. Start MongoDB Shell
+- Import the datasets into MongoDB Atlas. From the supplied files folder in the terminal, run
+- Linux/Mac
+```bash
+./import-datasets.sh
+```
+- For Windows
+```cmd
+.\import-datasets.bat
+```
+
+## 2. Start MongoDB Shell
 
 ```bash
 mongosh
@@ -51,7 +73,7 @@ support_tickets
 product_events
 ```
 
-## 2. Verify Document Counts
+## 3. Verify Document Counts
 
 ```js
 db.users.countDocuments()
@@ -77,7 +99,7 @@ Expected counts:
 | `support_tickets` | 25,000 |
 | `product_events` | 100,000 |
 
-## 3. Check Existing Indexes
+## 4. Check Existing Indexes
 
 Since data was imported using `mongoimport`, the collections should initially have only the default `_id` index unless indexes were manually created earlier.
 
