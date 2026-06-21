@@ -1444,6 +1444,15 @@ For a query to be covered:
 2. Projected fields must be in the index.
 3. `_id` must be excluded unless `_id` is part of the index.
 
+Run:
+
+```js
+db.users.find(
+  { status: "active" },
+  { _id: 0, email: 1, userId: 1 }
+).explain("executionStats")
+```
+
 Create index:
 
 ```js
@@ -1459,9 +1468,18 @@ db.users.find(
 ).explain("executionStats")
 ```
 
+Run with `_id` included:
+
+```js
+db.users.find(
+  { status: "active" },
+  { _id: 1, email: 1, userId: 1 }
+).explain("executionStats")
+```
+
 ### Expected Observation
 
-You may see `PROJECTION_COVERED`, and `totalDocsExamined` should be `0`.
+For the covered query you will see `PROJECTION_COVERED`, and `totalDocsExamined` should be `0`. Else it will be `PROJECTION_SIMPLE` and `totalDocsExamined` will be greater than `0`. `totalKeysExamined` should be same in last 2 cases.
 
 ### Exercise 7: Break the Covered Query
 
@@ -1531,7 +1549,7 @@ db.orders.find({
 Reflection:
 
 1. Did `nReturned` reduce?
-2. Did MongoDB need to scan fewer keys?
+2. What about `totalKeysExamined` and `totalDocsExamined`? Did MongoDB need to scan fewer keys?
 3. Why is `limit()` important for API endpoints?
 
 ---
@@ -1582,8 +1600,13 @@ db.products.find(
 Reflection:
 
 1. Does projection reduce documents examined?
-2. Does projection reduce network payload?
-3. Why is projection useful even if it does not always change the query plan?
+2. Does projection reduce the time to serialize documents?
+3. Does projection reduce network payload?
+4. Does projection reduce network latency?
+5. Does projection reduce client-side processing time?
+6. Why is projection useful even if it does not always change the query plan?
+
+Network latency reduces when projection is used (this is not included in the `executionTimeMillis` as that is the server time; it only measures the time to build result documents and serialize BSON). However the time to serialize also reduces when projection is used, because the server has to serialize fewer fields. This can be significant for large documents.
 
 ---
 
