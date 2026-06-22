@@ -52,9 +52,9 @@ By the end of this session, participants will be able to design scalable MongoDB
 
 | Topic                                    |   Duration |
 | ---------------------------------------- | ---------: |
-| Introduction to Schema Design in MongoDB |     10 min |
-| Schema Design Principles                 |     20 min |
-| Query-driven Schema Design               |     20 min |
+| Introduction to Schema Design in MongoDB |     5 min |
+| Schema Design Principles                 |     10 min |
+| Query-driven Schema Design               |     10 min |
 | Embedding vs Referencing                 |     25 min |
 | Modeling Relationships (1-1, 1-N, N-N)   |     25 min |
 | Data Duplication vs Normalization        |     15 min |
@@ -71,9 +71,9 @@ By the end of this session, participants will be able to design scalable MongoDB
 | Schema Versioning                        |     10 min |
 | Schema Anti-patterns                     |     10 min |
 
-**Instruction Time:** 265 min (4h 25m)
+**Instruction Time:** 240 min (4h)
 **Break:** 10 min
-**Total Session Duration:** 275 min (4h 35m)
+**Total Session Duration:** 250 min (4h 10m)
 
 ### Schema Design Workshop (Self-exploration)
 
