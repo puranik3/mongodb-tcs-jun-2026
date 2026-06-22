@@ -1993,7 +1993,7 @@ Regex matching does not make use of indexes efficiently (may make use of indexes
 
 ## Session 1 End-of-Session Lab: Diagnose and Index Real Query Patterns
 
-**Time:** 15 minutes  
+**Time:** 15 minutes
 **Goal:** Look at short application scenarios, decide the right index or identify why the query is slow.
 
 Work in pairs. Do not create duplicate indexes blindly. First check existing indexes, then decide whether a new index is needed.
@@ -2027,39 +2027,52 @@ Suggested thinking:
 Equality fields first, sort field next.
 ```
 
-### Scenario B: Customer Order History
+### Scenario B: High-value Customer Order History
 
-The application shows the latest delivered orders for one user.
+The application shows the latest delivered high-value orders for one user.
 
 ```js
 db.orders.find({
   userId: "U000100",
-  status: "delivered"
+  status: "delivered",
+  totalAmount: { $gte: 5000 }
 }).sort({ createdAt: -1 }).limit(10).explain("executionStats")
 ```
 
 Tasks:
 
-1. Decide whether the current indexes support this query well.
-2. Create an index if needed.
+1. Identify the equality, sort, and range fields.
+2. Create a suitable compound index using the ESR rule.
 3. Check whether the query avoids an in-memory `SORT`.
 
-### Scenario C: Support Dashboard Performance Issue
+Suggested thinking:
 
-Support agents frequently open a dashboard that shows urgent open tickets first.
+```text
+Equality fields first, sort field next, range field last.
+```
+
+### Scenario C: Product Tag Filter
+
+The application shows products tagged as best-sellers.
 
 ```js
-db.support_tickets.find({
-  status: "open",
-  priority: "high"
-}).sort({ createdAt: -1 }).limit(20).explain("executionStats")
+db.products.find({
+  tags: "best-seller"
+}).limit(20).explain("executionStats")
 ```
 
 Tasks:
 
-1. Identify the performance problem from `explain("executionStats")`.
-2. Create a suitable index.
-3. Rerun the query and compare `totalDocsExamined`, `totalKeysExamined`, and the winning plan.
+1. Identify whether the query uses `COLLSCAN` or `IXSCAN`.
+2. Create a suitable index if needed.
+3. Explain why this becomes a multikey index.
+
+Suggested thinking:
+
+```text
+Array fields create multikey indexes.
+One document can create multiple index entries.
+```
 
 ### Scenario D: Search Query Problem
 
@@ -2082,11 +2095,11 @@ Tasks:
 Fill this table:
 
 | Scenario | Problem Observed | Index / Fix Suggested | Why This Helps |
-|---|---|---|---|
-| A | | | |
-| B | | | |
-| C | | | |
-| D | | | |
+| -------- | ---------------- | --------------------- | -------------- |
+| A        |                  |                       |                |
+| B        |                  |                       |                |
+| C        |                  |                       |                |
+| D        |                  |                       |                |
 
 ### Takeaway
 
