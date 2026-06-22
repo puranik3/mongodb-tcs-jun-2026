@@ -16,30 +16,53 @@ The guide mixes explanation with exercises. Participants should run each query, 
 # Setup and Verification
 
 ## 1. Import dataset
-- Unzip `supplied-files/datasets.zip` file
-- If importing to an Atlas cluster, set the `MONGOSH_URI` environment variable to your MongoDB Atlas connection string before running the script. No special setup is needed for local MongoDB running on the standar port 27017.
-- Linux/Mac
-```bash
-export MONGOSH_URI="mongodb+srv://<username>:<password>@<cluster-url>"
-```
-- Windows
-```cmd
-setx MONGOSH_URI mongodb+srv://<username>:<password>@<cluster-url>
-```
-- Make sure you have the `mongoimport` tool installed and available in your PATH. You can check by running:
 
+### Option 1: Use the supplied datasets to import into Atlas / local database
+
+- Unzip `supplied-files/datasets.zip` file
+- If importing to an Atlas cluster, set the `MONGOSH_URI` environment variable to your MongoDB Atlas connection string before running the script. __No special setup is needed for local MongoDB running on the standar port 27017__ - so skip this step for local setup.
+- Make sure you have the `mongoimport` tool installed and available in your PATH. You can check by running:
 ```bash
 mongoimport --version
 ```
 
+- For __Linux/Mac__
+```bash
+export MONGOSH_URI="mongodb+srv://<username>:<password>@<cluster-url>"
+```
+- For __Windows__
+```cmd
+setx MONGOSH_URI mongodb+srv://<username>:<password>@<cluster-url>
+```
+
 - Import the datasets into MongoDB Atlas. From the supplied files folder in the terminal, run
-- Linux/Mac
+
+- For __Linux/Mac__
 ```bash
 ./import-datasets.sh
 ```
-- For Windows
+- For __Windows__
 ```cmd
 .\import-datasets.bat
+```
+
+### Option 2: Use the instructor's Atlas cluster to import the datasets to your local MongoDB instance
+
+There is already a set up of the DB on the instructor's Atlas cluster. Ask the instructor for the connection string and replace details in the `mongodump` command below. Then set it up locally using `mongodump` and `mongorestore`.
+- Make sure you have the `mongodump` and `mongorestore` tools installed and available in your PATH. You can check by running:
+```bash
+mongodump --version
+mongorestore --version
+```
+
+Now run the following commands to dump the database from Atlas and restore it to your local MongoDB instance. ```bash
+mongodump \
+  --uri="mongodb+srv://<username>:<password>@<cluster-url>/<db-name>" \
+  --out=./dump
+
+mongorestore \
+  --uri="mongodb://localhost:27017" \
+  ./dump
 ```
 
 ## 2. Start MongoDB Shell
