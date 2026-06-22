@@ -1828,6 +1828,109 @@ Reflection:
 
 ---
 
+## Session 1 End-of-Session Lab: Diagnose and Index Real Query Patterns
+
+**Time:** 15 minutes  
+**Goal:** Look at short application scenarios, decide the right index or identify why the query is slow.
+
+Work in pairs. Do not create duplicate indexes blindly. First check existing indexes, then decide whether a new index is needed.
+
+```js
+db.products.getIndexes()
+db.orders.getIndexes()
+db.support_tickets.getIndexes()
+```
+
+### Scenario A: Product Listing Page
+
+The application shows active electronics products sorted by lowest sale price. Only listing fields are needed.
+
+```js
+db.products.find(
+  { category: "electronics", status: "active" },
+  { _id: 0, productId: 1, name: 1, salePrice: 1, rating: 1 }
+).sort({ salePrice: 1 }).limit(20).explain("executionStats")
+```
+
+Tasks:
+
+1. Identify whether the query uses `COLLSCAN`, `IXSCAN`, `FETCH`, or `SORT`.
+2. Create a suitable compound index if needed.
+3. Explain why the field order is suitable.
+
+Suggested thinking:
+
+```text
+Equality fields first, sort field next.
+```
+
+### Scenario B: Customer Order History
+
+The application shows the latest delivered orders for one user.
+
+```js
+db.orders.find({
+  userId: "U000100",
+  status: "delivered"
+}).sort({ createdAt: -1 }).limit(10).explain("executionStats")
+```
+
+Tasks:
+
+1. Decide whether the current indexes support this query well.
+2. Create an index if needed.
+3. Check whether the query avoids an in-memory `SORT`.
+
+### Scenario C: Support Dashboard Performance Issue
+
+Support agents frequently open a dashboard that shows urgent open tickets first.
+
+```js
+db.support_tickets.find({
+  status: "open",
+  priority: "high"
+}).sort({ createdAt: -1 }).limit(20).explain("executionStats")
+```
+
+Tasks:
+
+1. Identify the performance problem from `explain("executionStats")`.
+2. Create a suitable index.
+3. Rerun the query and compare `totalDocsExamined`, `totalKeysExamined`, and the winning plan.
+
+### Scenario D: Search Query Problem
+
+A developer wrote this query for product search:
+
+```js
+db.products.find({
+  name: /smart/i
+}).explain("executionStats")
+```
+
+Tasks:
+
+1. Identify why this may be slow.
+2. Decide whether a normal ascending index is enough.
+3. Suggest a better search approach for keyword search.
+
+### Lab Output
+
+Fill this table:
+
+| Scenario | Problem Observed | Index / Fix Suggested | Why This Helps |
+|---|---|---|---|
+| A | | | |
+| B | | | |
+| C | | | |
+| D | | | |
+
+### Takeaway
+
+Index design starts from real query patterns. A good index should support the filter, sort, projection, and limit used by the application.
+
+---
+
 ## Session 1 Practice Questions
 
 ### Q1. A collection has 5 million documents. A query filters on a field that has no index. What is the most likely execution behavior?
@@ -2759,6 +2862,105 @@ Reflection:
 2. What is wrong with Design B?
 3. What is wrong with Design C?
 4. How would you redesign each one?
+
+---
+
+## Session 2 End-of-Session Lab: Design a Short Application Schema
+
+**Time:** 20 minutes  
+**Goal:** Design a MongoDB schema from application requirements using the patterns learned in this session.
+
+### Application: Online Learning Platform
+
+The application supports online courses and live workshops. Users can browse courses, enroll, watch lessons, submit reviews, and track activity.
+
+Main requirements:
+
+1. Users browse active courses by `category`, `level`, `price`, and `rating`.
+2. A course detail page shows course information, instructor summary, modules, rating summary, and latest 3 approved reviews.
+3. A user profile page shows the user and their latest enrollments.
+4. Enrollment history must preserve the course title and price at the time of enrollment.
+5. Reviews can grow to thousands per popular course.
+6. Lesson activity events can become very high volume.
+7. Course specifications vary by category. For example, programming courses have language/framework fields, while design courses have tool/version fields.
+
+### Tasks
+
+#### 1. Identify Collections
+
+List the main collections you would create.
+
+| Collection | Purpose |
+|---|---|
+| | |
+| | |
+| | |
+| | |
+
+#### 2. Decide Embed vs Reference
+
+| Relationship | Embed or Reference? | Reason |
+|---|---|---|
+| Course → Modules | | |
+| Course → Reviews | | |
+| User → Enrollments | | |
+| Enrollment → Course Snapshot | | |
+| Course → Instructor | | |
+| Course → Activity Events | | |
+
+#### 3. Sketch Two Important Documents
+
+Sketch a possible `courses` document and an `enrollments` document. Keep only important fields.
+
+```js
+// courses
+{
+
+}
+```
+
+```js
+// enrollments
+{
+
+}
+```
+
+#### 4. Apply Schema Design Patterns
+
+Identify one place where each idea applies.
+
+| Concept / Pattern | Where would you use it? |
+|---|---|
+| Avoid unbounded array | |
+| Duplicate snapshot data | |
+| Attribute Pattern | |
+| Subset Pattern | |
+| Bucket Pattern | |
+| Outlier Pattern | |
+
+#### 5. Suggest Indexes for Two Query Patterns
+
+Choose two important queries and suggest indexes.
+
+| Query Pattern | Suggested Index |
+|---|---|
+| Browse courses by category and price | |
+| Latest enrollments for a user | |
+
+### Lab Output
+
+Each group should be ready to explain:
+
+1. Which data is embedded and why.
+2. Which data is referenced and why.
+3. Which arrays are bounded and which are avoided.
+4. Which fields are duplicated intentionally.
+5. Which indexes support the main read patterns.
+
+### Takeaway
+
+A good MongoDB schema is not just a set of collections. It is a design based on query patterns, relationship size, data growth, duplication trade-offs, and future scalability.
 
 ---
 
