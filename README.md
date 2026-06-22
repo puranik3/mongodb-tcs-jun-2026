@@ -1386,6 +1386,57 @@ These are some other index types that are less common and left for self-explorat
 - _Sparse index_ - Indexes only documents that contain the indexed field (partial indexes are often preferred today)
 - _Hidden index_ - Index exists but is ignored by the query planner (useful for testing or deprecating indexes). It is preferable to hide an index rather than drop it, because dropping an index can be expensive and time-consuming on large collections. Hiding allows you to test the impact of removing an index without actually deleting it.
 - _Collation index_ - Used for language/case-insensitive comparisons
+- Good catch. The wording should be more precise.
+
+A __normal ascending index with default/simple collation__ helps __case-sensitive equality__, but not __case-insensitive equality__. For case-insensitive equality, create a __collation-aware index__ or store a normalized value such as lowercase text. However, even collation-aware indexes do not improve performance for `$regex` queries, as `$regex` is not collation-aware.
+
+```js
+db.products.createIndex({ name: 1 })
+
+db.products.find({ name: "smart" })
+```
+
+This can use the `{ name: 1 }` index.
+
+But this query from the lab is **not equality**:
+
+```js
+db.products.find({ name: /smart/i })
+```
+
+That is a **case-insensitive regex pattern match**. MongoDB docs note that `$regex` is not collation-aware, so case-insensitive indexes do not improve `$regex` performance.
+
+Example with collation:
+
+```js
+db.products.createIndex(
+  { name: 1 },
+  { collation: { locale: "en", strength: 2 } }
+)
+
+db.products.find({ name: "smart" })
+  .collation({ locale: "en", strength: 2 })
+```
+
+That is useful for case-insensitive equality like:
+
+```text
+smart == Smart == SMART
+```
+
+Common values for `strength`:
+
+| Strength | Meaning                         | Example behavior               |
+| -------: | ------------------------------- | ------------------------------ |
+|      `1` | Base character comparison       | ignores case and accents       |
+|      `2` | Base + accent comparison        | ignores case, respects accents |
+|      `3` | Base + accent + case comparison | respects case                  |
+
+So for most case-insensitive equality queries, this is common:
+
+```js
+{ locale: "en", strength: 2 }
+```
 
 ---
 
@@ -1848,6 +1899,95 @@ Reflection:
 1. Did this use an index effectively?
 2. How many documents were examined?
 3. Would a text index be better for search-like functionality?
+
+**For basic search-like functionality**, a **text index is usually better than regex**.
+
+Example:
+
+```js
+db.products.createIndex({
+  name: "text",
+  description: "text",
+  tags: "text"
+})
+```
+
+Query:
+
+```js
+db.products.find({
+  $text: { $search: "Pro" }
+})
+```
+
+### Why text index is better
+
+A text index is useful when you want to search for **words/terms**, such as:
+
+```js
+"premium laptop"
+"wireless mouse"
+"smart phone"
+```
+
+It supports:
+
+```text
+word-based search
+multi-field search
+relevance score
+language stemming
+stop-word handling
+```
+
+Example with score:
+
+```js
+db.products.find(
+  { $text: { $search: "premium smart" } },
+  { score: { $meta: "textScore" }, name: 1 }
+).sort({
+  score: { $meta: "textScore" }
+})
+```
+
+### But text index is not better for everything
+
+For this kind of search:
+
+```js
+{ name: /Pro/ }
+```
+
+you are searching for a **substring**. MongoDB text index is **not a general substring search engine**.
+
+So:
+
+```text
+"Pro Max"
+```
+
+may match `"Pro"` as a word, but:
+
+```text
+"Product"
+"Professional"
+"GoPro"
+```
+
+may not behave like `/Pro/`.
+
+### Rule of thumb
+
+| Requirement                                         | Better option                                   |
+| --------------------------------------------------- | ----------------------------------------------- |
+| Exact match                                         | Normal index                                    |
+| Prefix match like `^Pro`                            | Normal index on `name`                          |
+| Word-based search                                   | Text index                                      |
+| Substring/fuzzy/autocomplete/search engine behavior | Atlas Search / Elasticsearch / Meilisearch etc. |
+
+### Takeaway
+Regex matching does not make use of indexes efficiently (may make use of indexes partially sometimes). Use a text index for basic word search, but again, not as a replacement for full search-engine-style features. 
 
 ---
 
