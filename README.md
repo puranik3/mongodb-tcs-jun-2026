@@ -3625,6 +3625,59 @@ Reflection:
 2. Should every migration update all documents immediately?
 3. What are the risks of supporting multiple schema versions?
 
+Schema versioning is useful because MongoDB collections can contain documents with different shapes over time.
+
+For small collections, updating all documents immediately may be fine. For large collections, it may be better to migrate gradually.
+
+```text
+update documents in batches
+migrate only active records first
+migrate when a document is read or written
+support old and new versions temporarily
+```
+
+Supporting multiple schema versions makes application logic more complex.
+
+For example, code may need to handle both:
+
+```js
+// version 1
+{
+  productId: "P000100",
+  price: 1000
+}
+```
+
+and:
+
+```js
+// version 2
+{
+  productId: "P000100",
+  pricing: {
+    mrp: 1200,
+    salePrice: 1000
+  }
+}
+```
+
+Risks include:
+
+```text
+more conditional logic in code
+harder testing
+bugs due to old document shapes
+inconsistent query behavior
+more complex indexes
+long-term technical debt
+```
+
+**Takeaway**
+
+```text
+Schema versioning is useful for safe migrations, but old versions should not be supported forever unless necessary.
+```
+
 ---
 
 ## 15. Schema Anti-patterns
