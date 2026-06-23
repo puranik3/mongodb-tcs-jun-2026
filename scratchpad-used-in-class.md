@@ -42,7 +42,7 @@ Q2: db.users.find( { email: "jon@example.com" }, { email: 1, name: 1 } ).sort( {
 
 ---
 
-- When can you ise explain()?
+- When can you use explain()?
 To use explain(), you need a cursor. You can use it with find() but not with findOne().
     - You can use with sort() and limit() as well.
     - count() is a special case, it does not return a cursor, so you cannot use explain() with count(). You can use countDocuments() instead.
@@ -56,6 +56,8 @@ __Compound index__
 
 - When will the index be used for the following queries?
 ```text
+find(x) -> index can be used
+find(y) -> index cannot be used
 find(x).sort(y) -> index can be used
 find(x).sort(y: 1, z: 1) -> index can be used
 find(x).sort(z) -> index cannot be used
@@ -131,3 +133,185 @@ When you create a text index, MongoDB will tokenize the text fields and create a
 
 **Unique index**
 - REQUIRES UNIQUE VALUES for indexed field (works on user email, will not work on user name)
+
+**Partial index**
+- Indexes only a __subset of documents__ in a collection based on a filter expression. This can be useful for optimizing queries that only need to access a specific subset of documents, such as inactive users
+```js
+db.users.createIndex(
+  { status: 1 },
+  {
+    partialFilterExpression: {
+      status: "inactive"
+    }
+  }
+)
+```
+inactive users -> index can be used
+``js
+db.users.find( { status: "inactive" } ) -> index can be used
+```
+inactive users index will be smaller in size
+
+**Covered query**
+- A query is considered covered if all the fields in the query are part of an index, including the fields returned in the projection. This means that the query can be satisfied entirely using the index, without having to read the actual documents from the collection.
+- Entries in index { status: 1, email: 1, userId: 1 }
+```text
+status: 'inactive', email: 'user@example.com', userId: 123 -> document 0x12345678
+status: 'active', email: 'activeuser@example.com', userId: 124 -> document 0x12345679
+```
+
+**Drawbacks on indexes**
+- Indexes take up disk space and memory
+- Indexes can slow down write operations, as the index needs to be updated whenever a document is inserted, updated, or deleted. This can lead to increased latency for write-heavy workloads.
+    - Without index: Add user -> Adds to DB file -> 10 ms
+    - With index: Add user -> Adds to DB file -> Updates index files -> 20 ms
+
+**DB Design**
+
+**Data duplication**
+- A scenario where we are fine with data duplication - think order and products
+- Correct
+```js
+{
+    customerName: "John Doe",
+    items: [
+        { productId: 1, productName: "Product A", price: 10 },
+        { productId: 2, productName: "Product B", price: 20 }
+    ]
+}
+```
+- Incorrect
+```js
+{
+    customerName: "John Doe",
+    items: [1, 2]
+}
+```
+
+**Embedding and References**
+```js
+{
+    _id: 1,
+    name: "John Doe",
+    address: {
+        street: "123 Main St",
+        city: "Anytown",
+        state: "CA",
+        zip: "12345"
+    }
+}
+```
+- In case of multiple addresses, we can use an array of embedded documents
+```js
+{
+    _id: 1,
+    name: "John Doe",
+    addresses: [
+        {
+            street: "123 Main St",
+            city: "Anytown",
+            state: "CA",
+            zip: "12345"
+        },
+        {
+            street: "456 Oak St",
+            city: "Othertown",
+            state: "NY",
+            zip: "67890"
+        }
+    ]
+}
+```
+- In case of single reference, we can use a reference to another document. An order can be placed by one user only
+```js
+{
+    _id: 1,
+    userId: 123, // reference to the user document (_id)
+    items: [
+        { productId: 1, quantity: 2 },
+        { productId: 2, quantity: 1 }
+    ]
+}
+```
+- Suppose product can belong to multiple categories, we can use an array of references to category documents
+```js
+{
+    _id: 1,
+    name: "Product A",
+    categoryIds: [1, 2] // references to category documents (_id)
+}
+```
+
+**Embedding vs References**
+- Order and order items.
+- The max. size of a single document in MongoDB is 16 MB. If the order items can grow beyond this limit, we should use references instead of embedding.
+- We do not expect items to grow beyond 16 MB, we can use embedding for better performance and simplicity.
+**Example of embedding for 1:N relationship**
+- Option A: Embedding
+```js
+{
+    _id: 1,
+    userName: "JOhn Doe",
+    oid: "OID123",
+    items: [
+        { /*productId: 1,*/ productName: 'A', quantity: 2, price: 10 },
+        { /*productId: 2,*/ productName: 'B', quantity: 1, price: 20 }
+    ]
+}
+```
+- Option B: References
+- order
+```js
+{
+    _id: 1,
+    userName: "John Doe",
+    items: [ OI123, OI234]
+}
+```
+- order_item
+```js
+{
+    _id: "OI123",
+    orderId: 1,
+    productId: 1,
+    quantity: 2,
+    price: 10
+},
+{
+    _id: "OI234",
+    orderId: 1,
+    productId: 2,
+    quantity: 1,
+    price: 20
+}
+```
+
+**Relationship Cardinality**
+- 1:1 -> One user has one profile - user and profile can be embedded in the same document
+```js
+{
+    _id: 1,
+    userName: "John Doe",
+    profile: {
+        age: 30,
+        preferredContactMethod: "email"
+    }
+}
+```
+- unless size of total document exceeds 16 MB, we can embed profile in user document
+
+**Attribute Pattern**
+```js
+{
+    _id: 1,
+    name: "Head First Java",
+    price: 500,
+    averageRating: 4.6,
+    attributes: [
+        { name: "author", value: "Kathy Sierra" },
+        { name: "publisher", value: "O'Reilly Media" },
+        { name: "language", value: "English" },
+        { name: "numPages", value: 720 },
+        { name: "isbn", value: "978-0596009205" }
+    ]
+}
