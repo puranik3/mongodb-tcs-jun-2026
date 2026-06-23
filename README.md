@@ -2111,73 +2111,73 @@ Index design starts from real query patterns. A good index should support the fi
 
 ### Q1. A collection has 5 million documents. A query filters on a field that has no index. What is the most likely execution behavior?
 
-A. MongoDB scans all or many collection documents
-B. MongoDB scans only matching index entries
-C. MongoDB skips query planning entirely
-D. MongoDB automatically creates an index
+- A. MongoDB scans all or many collection documents
+- B. MongoDB scans only matching index entries
+- C. MongoDB skips query planning entirely
+- D. MongoDB automatically creates an index
 
 ### Q2. Which `explain()` mode is most useful when you want actual values such as documents examined, keys examined, and number of documents returned?
 
-A. `queryPlanner`
-B. `executionStats`
-C. `indexOnly`
-D. `schemaStats`
+- A. `queryPlanner`
+- B. `executionStats`
+- C. `indexOnly`
+- D. `schemaStats`
 
 ### Q3. A query on `email` returns one document from a million users, while a query on `status` returns 600,000 documents. Which statement is most accurate?
 
-A. `status` is more selective than `email`
-B. Both fields have equal selectivity
-C. `email` is more selective than `status`
-D. Selectivity only depends on index size
+- A. `status` is more selective than `email`
+- B. Both fields have equal selectivity
+- C. `email` is more selective than `status`
+- D. Selectivity only depends on index size
 
 ### Q4. An application frequently runs: find invoices for one customer, sorted by invoice date descending. Which index is generally best?
 
-A. `{ invoiceDate: -1, customerId: 1 }`
-B. `{ amount: 1, customerId: 1 }`
-C. `{ invoiceDate: 1, amount: 1 }`
-D. `{ customerId: 1, invoiceDate: -1 }`
+- A. `{ invoiceDate: -1, customerId: 1 }`
+- B. `{ amount: 1, customerId: 1 }`
+- C. `{ invoiceDate: 1, amount: 1 }`
+- D. `{ customerId: 1, invoiceDate: -1 }`
 
 ### Q5. A `posts` collection has a `tags` array. An index is created on `{ tags: 1 }`. Why is this called a multikey index?
 
-A. It indexes multiple collections together
-B. One array document can create multiple index entries
-C. It requires multiple shard keys
-D. It stores multiple indexes in memory only
+- A. It indexes multiple collections together
+- B. One array document can create multiple index entries
+- C. It requires multiple shard keys
+- D. It stores multiple indexes in memory only
 
 ### Q6. A blog platform needs basic keyword search across `title` and `body`. Which index type is most appropriate?
 
-A. Hashed index
-B. TTL index
-C. Text index
-D. Unique index
+- A. Hashed index
+- B. TTL index
+- C. Text index
+- D. Unique index
 
 ### Q7. A collection stores activity events by `sessionId`. Queries usually search for one exact `sessionId`. Which index can help equality lookup and shard distribution?
 
-A. `{ sessionId: "text" }`
-B. `{ sessionId: -1, time: 1 }` only
-C. `{ sessionId: "ttl" }`
-D. `{ sessionId: "hashed" }`
+- A. `{ sessionId: "text" }`
+- B. `{ sessionId: -1, time: 1 }` only
+- C. `{ sessionId: "ttl" }`
+- D. `{ sessionId: "hashed" }`
 
 ### Q8. A query filters by `status` and returns only `email`, excluding `_id`. The index contains `status` and `email`. What is the likely benefit?
 
-A. MongoDB must fetch every full document
-B. MongoDB ignores the projection
-C. MongoDB may answer using only the index
-D. MongoDB converts it to text search
+- A. MongoDB must fetch every full document
+- B. MongoDB ignores the projection
+- C. MongoDB may answer using only the index
+- D. MongoDB converts it to text search
 
 ### Q9. An API list endpoint needs only `name`, `price`, and `rating`, but documents contain many large fields. Why use projection?
 
-A. To delete unused fields permanently
-B. To reduce returned fields and network payload
-C. To force a unique index
-D. To disable query planning
+- A. To delete unused fields permanently
+- B. To reduce returned fields and network payload
+- C. To force a unique index
+- D. To disable query planning
 
 ### Q10. Why should developers avoid creating indexes on every field?
 
-A. Indexes prevent queries from using filters
-B. Indexes disable document validation
-C. Indexes remove the `_id` field
-D. Indexes increase storage and write maintenance cost
+- A. Indexes prevent queries from using filters
+- B. Indexes disable document validation
+- C. Indexes remove the `_id` field
+- D. Indexes increase storage and write maintenance cost
 
 ---
 
@@ -2204,9 +2204,66 @@ By the end of this session, participants will be able to design scalable MongoDB
 
 ---
 
-## 1. Introduction to Schema Design in MongoDB
+## Dataset Context
 
-MongoDB does not force a fixed schema, but schema design is still very important.
+Many examples use an e-commerce dataset.
+
+| Collection | Approx. Records | Purpose |
+|---|---:|---|
+| [`users`](./datasets/users.ndjson) | 50,000 | Filtering, sorting, selectivity, compound indexes, projections |
+| [`products`](./datasets/products.ndjson) | 10,000 | Text indexes, category filters, price/rating indexes, attribute pattern |
+| [`categories`](./datasets/categories.ndjson) | 49 | Simple reference data, category hierarchy |
+| [`orders`](./datasets/orders.ndjson) | 100,000 | Compound indexes, ESR rule, date-range queries, customer order history |
+| `order_items` - embedded order items in `orders` | NA | Schema design: embedding vs referencing, document growth |
+| [`reviews`](./datasets/reviews.ndjson) | 100,000 | Multikey-style access patterns, product/user lookups, sort by rating/date |
+| [`inventory`](./datasets/inventory.ndjson) | 20,000 | Product-stock lookup, warehouse queries, update-heavy collection |
+| [`support_tickets`](./datasets/support_tickets.ndjson) | 25,000 | Text search, status/date filtering, case-study optimization |
+| [`product_events`](./datasets/product_events.ndjson) | 100,000 | Bucket pattern demo, high-volume time-series-style events |
+| **Total** | **405,049** | |
+
+---
+
+## Consolidation Map: Concepts, Variations, and Example Purpose
+
+| Concept | Example retained | Unique aspect covered |
+|---|---|---|
+| Query-driven design | Latest 10 orders for a user | Schema fields and index come from the query pattern |
+| Read/write frequency | User/account status duplicated in tasks/comments/messages | Current-state data should not be duplicated everywhere |
+| Embedding read-together data | Order line items inside `orders` | Data commonly displayed together can be fetched in one query |
+| Snapshot duplication | Customer/product snapshot in an order | Historical values are intentionally preserved |
+| Avoiding uncontrolled growth | Reviews stored separately from products | Unbounded child data should not grow inside parent documents |
+| Query pattern discovery | Product listing, details, orders, reviews, tickets, events | Start schema design from application screens and access paths |
+| Embedding vs referencing | Order items vs product reviews | Bounded child data can be embedded; unbounded child data should be referenced |
+| One-to-one | User preferences embedded in `users` | Small one-to-one data can live with parent |
+| One-to-many | User orders referenced, addresses embedded | Same relationship type can be embedded or referenced depending on boundedness/query needs |
+| Independent child querying | Addresses in Bangalore query | Embedded arrays are awkward when the child is the main query target |
+| Many-to-many with snapshot | Products inside orders | Many-to-many does not always require a join collection when order items are snapshots |
+| Many-to-many with relationship data | Students, courses, enrollments | Use a relationship collection when the relationship has its own fields |
+| Many-to-many with simple array | Products with `categoryIds` | A simple ID array can model a relationship when no relationship fields are needed |
+| Duplication vs normalization | `orders.items.nameSnapshot`, `unitPrice` | Duplicate data only when it improves reads or preserves history |
+| Document growth | `users.activityLog` vs `user_events` | Growing arrays affect reads, writes, indexes, and document size |
+| Unbounded arrays | Product reviews in `products` vs separate `reviews` | Store full children separately but keep small summary fields in parent |
+| Attribute Pattern | Product `attributes: [{ name, value }]` | Uniform storage/query/indexing for many variable searchable fields |
+| Sparse fields nuance | Phones/shirts/books with different fields | Sparse fields are acceptable when fields are limited and predictable |
+| `$elemMatch` nuance | Attribute query by `name` and `value` | Ensures multiple conditions match the same array element |
+| Bucket Pattern | Product events grouped by product/date | Reduces many small event documents when events are queried together |
+| Bucket boundary | Product + day/hour/eventType examples | Bucket key and size must follow query pattern and volume |
+| Subset Pattern | Latest 3 reviews embedded in product | Speeds common reads while full reviews stay separate |
+| Subset update cost | `reviews` and `products.recentReviews` | Duplicate subset introduces consistency/update complexity |
+| Outlier Pattern | Viral products with very high reviews/events | Exceptional cases should not dictate the common schema |
+| Outlier query routing | `hasReviewOutlier` service logic | Application logic chooses normal vs outlier storage path |
+| Projection | Product listing fields only | List views should fetch summary fields, not large detail fields |
+| Sharding | Candidate shard keys for orders/events/tickets/users | Shard key depends on cardinality, distribution, query routing, hotspots |
+| Schema versioning | `schemaVersion` field and migration approaches | Documents may evolve gradually over time |
+| Anti-patterns | Designs A, B, C | Diagnose unbounded arrays, over-normalization, and poor shard keys |
+
+---
+
+# Revised Lab Guide
+
+## 1. MongoDB Schema Design Mindset
+
+MongoDB does not force a fixed schema, but schema design is still important.
 
 A good MongoDB schema is designed around:
 
@@ -2217,15 +2274,13 @@ A good MongoDB schema is designed around:
 - consistency needs
 - scalability requirements
 
-MongoDB schema design is not about removing structure. It is about choosing the right structure for the application.
+MongoDB schema design is not about removing structure. It is about choosing the right structure for the application workload.
 
----
+## 2. Query-driven Schema Design
 
-## 2. Schema Design Principles
+### Concept
 
-### Principle 1: Design for Queries
-
-Start with the questions the application must answer.
+Before designing collections, identify query patterns. Start with the questions the application must answer.
 
 Example:
 
@@ -2248,26 +2303,6 @@ and an index:
 { userId: 1, createdAt: -1 }
 ```
 
-### Principle 2: Data Access Together Can Be Stored Together
-
-If data is usually read together, embedding may be useful.
-
-Example: order line items are embedded inside `orders`.
-
-### Principle 3: Avoid Uncontrolled Growth
-
-If an array can grow forever, do not embed it blindly.
-
-Example: product reviews can grow very large, so they are stored in a separate `reviews` collection.
-
----
-
-## 3. Query-driven Schema Design
-
-### Concept
-
-Before designing collections, identify query patterns.
-
 For an e-commerce system:
 
 | Query Pattern | Likely Collection |
@@ -2276,9 +2311,7 @@ For an e-commerce system:
 | Show product details | `products` |
 | Show latest orders for user | `orders` |
 | Show reviews for product | `reviews` |
-| Check stock by product and warehouse | `inventory` |
 | Show open support tickets by priority | `support_tickets` |
-| Analyze product activity by time | `product_events` |
 
 ### Exercise 13: Identify Query Patterns
 
@@ -2290,13 +2323,155 @@ For each screen, list the main query fields.
 | Product detail page | |
 | User order history page | |
 | Support dashboard | |
-| Inventory dashboard | |
 
 Example:
 
 ```text
 User order history page: userId, createdAt, status
 ```
+
+#### Model Solution
+
+| Application Screen | Query Fields |
+|---|---|
+| Product listing page | `category`, `price`, `availability`, `rating`, `brand`, `sortBy` |
+| Product detail page | `_id` / `slug`, `productId` |
+| User order history page | `userId`, `createdAt`, `status` |
+| Support dashboard | `status`, `priority`, `assignedTo`, `createdAt` |
+
+### Takeaway
+
+Design collections, embedded fields, references, and indexes from the most important application queries.
+
+---
+
+## 3. Read/Write Patterns, Duplication, and Snapshots
+
+### Concept
+
+MongoDB schemas often duplicate selected data to make reads faster. Duplication is useful only when
+- the duplicated data __does not need to remain current everywhere__
+- the duplicated value is intentionally a __historical snapshot__
+
+### Current-state data: avoid duplication
+
+If user/account status frequently changes, duplicating that status in many places is a bad idea.
+
+Bad duplication:
+
+```js
+projects.members.status
+tasks.assignees.status
+comments.authorStatus
+messages.senderStatus
+notifications.userStatus
+```
+
+Suppose a user is suspended, deactivated, or changes account status. If that status is duplicated in many places, one user status update may require updates across thousands or millions of documents.
+
+Better design:
+
+```js
+{
+  _id: ObjectId("..."),
+  title: "Fix payment bug",
+  assigneeId: ObjectId("...")
+}
+```
+
+Then read current status from `users`:
+
+```js
+{
+  _id: ObjectId("..."),
+  name: "John",
+  status: "active" // active / suspended / deactivated
+}
+```
+
+So:
+
+```js
+task.assigneeId → users.status
+```
+
+is better than duplicating:
+
+```js
+task.assigneeStatus
+```
+
+because one update to `users.status` is enough.
+
+### Historical snapshot data: duplication is intentional
+
+Orders are often shown with customer name and product snapshot.
+
+```js
+{
+  _id: ObjectId("..."),
+  userId: ObjectId("..."),
+  customerName: "John Doe",
+  items: [
+    {
+      productId: ObjectId("..."),
+      name: "iPhone 15",
+      price: 79900,
+      quantity: 1
+    }
+  ],
+  total: 79900
+}
+```
+
+Why?
+
+Because one query can fetch the complete order without joining multiple collections.
+
+Good for:
+
+```js
+db.orders.find({ userId: ... })
+```
+
+Duplicated product/customer data may become stale if the original customer/product changes. That is acceptable for orders because order items are a snapshot at the time of purchase. Past orders should not change when product name or price changes later.
+
+Another order item snapshot shape:
+
+```js
+{
+  productRef: ObjectId("..."),
+  productId: "P000123",
+  nameSnapshot: "Electronics Product 123",
+  unitPrice: 2499,
+  quantity: 2,
+  lineTotal: 4998
+}
+```
+
+A product may also capture category name, even though category name is stored in the `categories` collection, when the application wants to preserve the category name captured at that time.
+
+### Exercise 16: Product Snapshot Design
+
+Inspect order items:
+
+```js
+db.orders.findOne({}, {
+  orderId: 1,
+  items: 1
+})
+```
+
+Reflection:
+
+1. Why store `nameSnapshot`?
+2. Why store `unitPrice` inside the order?
+3. Should an old order change if product price changes later?
+4. Which fields should be duplicated and which should only be referenced?
+
+### Takeaway
+
+Duplication is problematic when the duplicated value is expected to remain current everywhere. Duplication is useful when it improves reads or preserves historical state.
 
 ---
 
@@ -2308,42 +2483,31 @@ Embedding means storing related data inside the same document.
 
 Referencing means storing related data in a separate collection and keeping an ID reference.
 
-### Embedded Example: Order Items
+### Embedded example: order items
 
-In `orders`, items are embedded:
+In `orders`, items are embedded - this was covered earlier as snapshot duplication.
 
-```js
-db.orders.findOne({}, { items: 1 })
-```
-
-This is useful because order items are usually displayed with the order.
-
-### Referenced Example: Product Reviews
-
-Reviews are stored separately:
-
-```js
-db.reviews.find({ productId: "P000100" })
-```
-
-This avoids making the product document grow indefinitely.
-
-### When to Embed
+**Takeaway**
 
 Embed when:
 
-- child data is usually read with parent data
-- child data is bounded
-- child data does not need independent heavy querying
-- parent and child are updated together
+- child data is usually read with parent data - Eg. order items are read with orders
+- child data is bounded - Eg. 1 to N relationship where N is small and predictable
+- child data does not need independent heavy querying - Eg. order items are not queried independently of orders
+- parent and child are updated together - Eg. order and its items are created together and not updated separately
+- data consistency is not a concern, or application can handle it
 
-### When to Reference
+### Referenced example: product reviews
+
+Reviews are stored separately - covered earlier as unbounded arrays.
+
+**Takeaway**
 
 Reference when:
 
-- child data can grow without limit
-- child data is queried independently
-- many parents refer to the same child
+- child data can grow without limit - Eg. a product can have thousands of reviews
+- child data is queried independently - Eg. find reviews for a product, __find reviews by a user__
+- many parents refer to the same child, such as categories and products - Eg. many products can belong to the same category, so category is referenced in products
 - data changes frequently and should not be duplicated everywhere
 
 ### Exercise 14: Analyze Existing Design
@@ -2366,11 +2530,17 @@ Reflection:
 2. Why are reviews separate?
 3. What would go wrong if all reviews were embedded inside products?
 
+### Takeaway
+
+Embed bounded data that is read with the parent. Reference data that grows independently, is queried independently, or must remain current in one place.
+
 ---
 
 ## 5. Modeling Relationships
 
-## 5.1 One-to-One
+Relationship type alone does not decide the schema. For each relationship, decide whether the related data is bounded, read together, queried independently, frequently updated, or shared.
+
+### 5.1 One-to-One
 
 Example: user and user preferences.
 
@@ -2382,9 +2552,9 @@ db.users.findOne({}, { userId: 1, preferences: 1 })
 
 This works because each user has one small preferences object.
 
-## 5.2 One-to-Many
+### 5.2 One-to-Many
 
-Example: user to orders.
+Example: user to orders, user to addresses.
 
 A user can have many orders. Orders are stored separately and reference the user:
 
@@ -2392,17 +2562,176 @@ A user can have many orders. Orders are stored separately and reference the user
 db.orders.find({ userId: "U000100" })
 ```
 
-## 5.3 Many-to-Many
+A user can have many addresses. Addresses are embedded inside the user document:
 
-Example: products and orders.
+```js
+{
+  _id: ObjectId("..."),
+  name: "John",
+  email: "john@example.com",
+  addresses: [
+    {
+      street: "123 Main St",
+      city: "Bangalore",
+      state: "KA",
+      zip: "560001",
+      country: "India"
+    },
+    {
+      street: "456 Park Ave",
+      city: "Mumbai",
+      state: "MH",
+      zip: "400001",
+      country: "India"
+    }
+  ],
+  ... other fields ...
+}
+```
+
+Querying addresses:
+```js
+db.users.findOne({}, { userId: 1, name: 1, email: 1, addresses: 1 })
+```
+
+There is a choice here: embed or reference. The decision depends on:
+
+- how many addresses a user can have: bounded vs unbounded
+- how often addresses are queried independently, for example for shipping
+
+If addresses are mostly accessed with the user and are not queried independently, embedding is fine.
+
+If addresses are queried independently, the main question is about addresses, not users. In that case, a separate `addresses` collection with a `userId` reference may be better.
+
+Example embedded-address query:
+
+```js
+// Find all addresses in Bangalore
+db.users.find(
+  { "addresses.city": "Bangalore" },
+  { name: 1, "addresses.$": 1 }
+)
+```
+
+This works, but there are two issues:
+
+- you are querying the `users` collection and getting user documents, not address documents
+- with `"addresses.$": 1`, MongoDB returns only the first matching address per user
+
+So embedding may not be ideal if addresses need independent querying and scalability.
+
+### 5.3 Many-to-Many
+
+#### Example 1: products and orders - a "snapshot duplication" example
 
 One order can contain many products. One product can appear in many orders.
 
-The `orders.items` array stores product snapshots and product references.
+However, the `orders.items` array stores product snapshots and not only product references. __Embedding product snapshots inside orders optimizes order display and preserves historical data, even though products and orders form a many-to-many relationship.__
+
+#### Example 2: students and courses - a "join collection" example
+
+One student can enroll in many courses. One course can have many students.
+
+In this case, we usually keep separate collections:
+
+- `students`
+- `courses`
+- `enrollments`
+
+The `enrollments` collection represents the many-to-many relationship.
 
 ```js
-db.orders.findOne({}, { items: 1 })
+// students
+{
+  _id: ObjectId("s1"),
+  name: "John",
+  email: "john@example.com"
+}
+
+// courses
+{
+  _id: ObjectId("c1"),
+  title: "MongoDB Advanced",
+  category: "Database"
+}
+
+// enrollments
+{
+  _id: ObjectId("e1"),
+  studentId: ObjectId("s1"),
+  courseId: ObjectId("c1"),
+  enrolledAt: ISODate("2026-06-01"),
+  status: "active",
+  progress: 40
+}
 ```
+
+Query: find all courses for a student.
+
+```js
+db.enrollments.find({
+  studentId: ObjectId("s1")
+})
+```
+
+Query: find all students enrolled in a course.
+
+```js
+db.enrollments.find({
+  courseId: ObjectId("c1")
+})
+```
+
+Why separate collections?
+
+Students and courses are both independent entities. Also, the relationship has its own data such as `enrolledAt`, `status`, and `progress`.
+
+Embedding all courses inside students would make course updates harder. Embedding all students inside courses could create large, growing arrays.
+
+#### Example 3: products and categories - a "reference array" example
+
+__This example assumes one product can belong to many categories.__ - the dataset assumes a single category per product, but let's say we want to allow multiple categories per product.
+
+```js
+// categories
+{
+  _id: ObjectId("c1"),
+  name: "Electronics",
+  slug: "electronics",
+  description: "Electronic devices and accessories",
+  parentCategoryId: null,
+  imageUrl: "/images/electronics.png",
+  displayOrder: 1,
+  isActive: true
+}
+
+{
+  _id: ObjectId("c2"),
+  name: "Mobile Phones",
+  slug: "mobile-phones",
+  description: "Smartphones and mobile accessories",
+  parentCategoryId: ObjectId("c1"),
+  imageUrl: "/images/mobiles.png",
+  displayOrder: 2,
+  isActive: true
+}
+```
+
+```js
+// products
+{
+  _id: ObjectId("p1"),
+  name: "iPhone 16",
+  price: 79900,
+  brand: "Apple",
+  categoryIds: [
+    ObjectId("c1"),
+    ObjectId("c2")
+  ]
+}
+```
+
+A separate relationship collection is not needed here because the relationship data is simple: just category IDs. There are no extra fields on the relationship. The `categoryIds` array can handle this many-to-many relationship.
 
 ### Exercise 15: Relationship Classification
 
@@ -2419,102 +2748,18 @@ Classify each relationship.
 
 ---
 
-## 6. Data Duplication vs Normalization
+## 6. Handling Document Growth and Unbounded Arrays
 
 ### Concept
 
-MongoDB schemas often duplicate selected data to make reads faster.
-
-Example from `orders.items`:
-
-```js
-{
-  productId: "P000123",
-  productRef: ObjectId("..."),
-  nameSnapshot: "Electronics Product 123",
-  unitPrice: 2499,
-  quantity: 2,
-  lineTotal: 4998
-}
-```
-
-The order stores a product snapshot. This is intentional.
-
-Benefits:
-
-- order display is faster
-- historical price is preserved
-- fewer joins/lookups are required
-
-Trade-off:
-
-- duplicated data may become stale
-- updates may need extra care
-
-### Exercise 16: Product Snapshot Design
-
-Inspect order items:
-
-```js
-db.orders.findOne({}, {
-  orderId: 1,
-  items: 1
-})
-```
-
-Reflection:
-
-1. Why store `nameSnapshot`?
-2. Why store `unitPrice` inside the order?
-3. Should an old order change if product price changes later?
-4. Which fields should be duplicated and which should only be referenced?
-
----
-
-## 7. Handling Document Growth
-
-### Concept
-
-MongoDB documents have a maximum size. Even before that limit, very large documents become inefficient.
+MongoDB has a 16 MB limit on a single document. Even before that limit, very large documents become inefficient.
 
 Document growth becomes risky when:
 
 - arrays keep growing
 - frequent updates increase document movement
 - large documents are read when only small parts are needed
-
-### Exercise 17: Compare Bounded and Unbounded Data
-
-Order items are bounded in this dataset:
-
-```js
-db.orders.aggregate([
-  { $group: { _id: "$itemCount", count: { $sum: 1 } } },
-  { $sort: { _id: 1 } }
-])
-```
-
-Reviews are potentially unbounded:
-
-```js
-db.reviews.aggregate([
-  { $group: { _id: "$productId", reviewCount: { $sum: 1 } } },
-  { $sort: { reviewCount: -1 } },
-  { $limit: 10 }
-])
-```
-
-Reflection:
-
-1. Why is `items` safer to embed than `reviews`?
-2. What happens if a popular product gets thousands of reviews?
-3. How does document growth affect read and write performance?
-
----
-
-## 8. Avoiding Unbounded Arrays
-
-### Concept
+- indexes on large arrays create many index entries
 
 An unbounded array is an array that can grow without a predictable upper limit.
 
@@ -2525,21 +2770,13 @@ Examples that can become unbounded:
 - support messages inside a ticket, if not controlled
 - followers/following lists in social apps
 
-### Bad Design Example
+### Bounded vs unbounded data
 
-```js
-{
-  productId: "P000100",
-  name: "Phone",
-  reviews: [
-    { rating: 5, body: "Good" },
-    { rating: 4, body: "Nice" }
-    // keeps growing forever
-  ]
-}
-```
+Order items are usually bounded, so embedding them is safer.
 
-### Better Design
+Reviews are potentially unbounded, so full reviews should be stored separately. So reviews and products are separate collections, every review has the reference to the product, and the product document can keep small summary fields like `reviewCount` and `averageRating`.
+
+Good design:
 
 ```js
 // products
@@ -2555,34 +2792,153 @@ Examples that can become unbounded:
   productId: "P000100",
   rating: 5,
   body: "Good"
+},
+...more reviews...
+```
+
+**ASIDE**: You can even keep the __latest 3 reviews embedded inside the product for fast access, while keeping all reviews in a separate collection__. This is a __subset pattern__ that optimizes the common case of showing recent reviews on the product page. Also rating related summary fields avoid scanning all reviews just to show rating summary on product listing or product detail pages.
+
+
+```js
+// products
+{
+  productId: "P000100",
+  name: "Phone",
+  reviewCount: 2400,
+  rating: 4.5,
+  ratingBreakdown: {
+    5: 180,
+    4: 80,
+    3: 30,
+    2: 10,
+    1: 5
+  }
+  latestReviews: [
+    {
+      rating: 5,
+      body: "Good"
+    },
+    {
+      rating: 4,
+      body: "Nice"
+    },
+    {
+      rating: 3,
+      body: "Okay"
+    }
+  ]
 }
 ```
 
-### Exercise 18: Review Query
+### Read performance impact
 
-Create index:
+MongoDB stores and reads whole documents, not individual fields as separate rows.
 
-```js
-db.reviews.createIndex({ productId: 1, createdAt: -1 })
-```
-
-Query latest reviews:
+If a document keeps growing:
 
 ```js
-db.reviews.find({
-  productId: "P000100"
-}).sort({ createdAt: -1 }).limit(10).explain("executionStats")
+{
+  _id: userId,
+  name: "John",
+  orders: [ ... thousands of orders ... ],
+  addresses: [ ... many addresses ... ],
+  activityLog: [ ... thousands of events ... ]
+}
 ```
 
-Reflection:
+then even a simple query like:
 
-1. Why is this better than embedding all reviews inside product?
-2. What index supports this query?
-3. What summary fields can still be kept in `products`?
+```js
+db.users.findOne({ _id: userId })
+```
+
+may read a large document from storage or memory.
+
+Problems:
+
+- more data has to be read from disk or memory
+- more data may be sent over the network
+- large arrays make filtering inside the document more expensive
+- indexes on large arrays can create many index entries
+
+Projection helps reduce network transfer:
+
+```js
+db.users.findOne(
+  { _id: userId },
+  { name: 1, email: 1 }
+)
+```
+
+But the document may still be large internally, especially if MongoDB has to fetch the full document after using an index.
+
+### Write performance impact
+
+Growing documents can make updates more expensive.
+
+Example:
+
+```js
+db.users.updateOne(
+  { _id: userId },
+  { $push: { activityLog: newEvent } }
+)
+```
+
+If `activityLog` keeps growing:
+
+- each write modifies a bigger document
+- arrays become harder to maintain
+- indexes on array fields (multikey indexes) need more maintenance and can grow very large
+- the document may eventually approach the 16 MB document limit
+
+Risky design:
+
+```js
+users.activityLog: [event1, event2, event3, ... thousands more]
+```
+
+Better design:
+
+```js
+// users
+{
+  _id: userId,
+  name: "John"
+}
+
+// user_events
+{
+  userId: userId,
+  type: "LOGIN",
+  createdAt: ISODate(...)
+}
+```
+
+Then recent activity can be queried separately:
+
+```js
+db.user_events.find({ userId }).sort({ createdAt: -1 }).limit(20)
+```
+
+### Takeaway
+
+Document growth is fine when embedded data is small and bounded.
+
+Avoid embedding arrays that can grow continuously:
+
+```text
+addresses       usually bounded       okay to embed
+orders          can grow a lot        usually separate
+order items     usually bounded       okay to embed
+cart items      usually bounded       okay to embed
+activity logs   unbounded             separate collection
+reviews         can grow a lot        separate collection
+```
 
 ---
 
-## 9. Schema Design Patterns Overview
+## 7. Schema Design Patterns Overview
 
 MongoDB schema patterns are reusable modeling strategies.
 
@@ -2597,11 +2953,11 @@ This session covers:
 
 ---
 
-## 10. Attribute Pattern
+## 8. Attribute Pattern
 
 ### Concept
 
-The Attribute Pattern is useful when documents have different sets of attributes.
+The Attribute Pattern is useful when documents have different sets of attributes and those attributes need to be searched or filtered dynamically.
 
 In `products`, attributes are stored like this:
 
@@ -2614,7 +2970,154 @@ attributes: [
 
 This helps model category-specific fields without creating many sparse fields.
 
-### Exercise 19: Query Attributes
+Nothing is inherently wrong with sparse fields. MongoDB handles missing fields naturally.
+
+This is valid:
+
+```js
+// phone
+{
+  name: "iPhone",
+  color: "black",
+  storage: "128GB",
+  ram: "8GB"
+}
+
+// shirt
+{
+  name: "T-shirt",
+  size: "M",
+  fabric: "cotton",
+  color: "blue"
+}
+
+// book
+{
+  name: "MongoDB Guide",
+  author: "John",
+  pages: 300,
+  language: "English"
+}
+```
+
+Sparse fields are fine when:
+
+```text
+the set of fields is small and predictable
+```
+
+Example:
+
+```js
+name
+price
+brand
+category
+color
+size
+```
+
+### Problem with many sparse searchable fields
+
+The problem starts when you have many product categories with many different searchable fields:
+
+```js
+storage
+ram
+screenSize
+fabric
+size
+author
+pages
+language
+material
+warranty
+batteryLife
+processor
+shoeSize
+gender
+```
+
+Now queries become category-specific:
+
+```js
+db.products.find({
+  category: "phones",
+  storage: "128GB",
+  color: "black"
+})
+```
+
+```js
+db.products.find({
+  category: "shirts",
+  size: "M",
+  fabric: "cotton"
+})
+```
+
+```js
+db.products.find({
+  category: "books",
+  author: "John",
+  language: "English"
+})
+```
+
+To optimize these, you may need many different indexes:
+
+```js
+db.products.createIndex({ category: 1, storage: 1 })
+db.products.createIndex({ category: 1, ram: 1 })
+db.products.createIndex({ category: 1, size: 1 })
+db.products.createIndex({ category: 1, fabric: 1 })
+db.products.createIndex({ category: 1, author: 1 })
+db.products.createIndex({ category: 1, language: 1 })
+```
+
+This becomes hard to maintain.
+
+### Attribute Pattern makes querying more uniform
+
+```js
+{
+  name: "iPhone",
+  category: "phones",
+  attributes: [
+    { name: "color", value: "black" },
+    { name: "storage", value: "128GB" },
+    { name: "ram", value: "8GB" }
+  ]
+}
+```
+
+Now many filters use the same structure:
+
+```js
+db.products.find({
+  category: "phones",
+  attributes: {
+    $elemMatch: {
+      name: "storage",
+      value: "128GB"
+    }
+  }
+})
+```
+
+Useful index:
+
+```js
+db.products.createIndex({
+  category: 1,
+  "attributes.name": 1,
+  "attributes.value": 1
+})
+```
+
+So instead of creating many indexes for many optional fields, you create a smaller number of generic indexes.
+
+### Exercise 16: Query Attributes
 
 Create index:
 
@@ -2622,20 +3125,7 @@ Create index:
 db.products.createIndex({ "attributes.name": 1, "attributes.value": 1 })
 ```
 
-Find products with a specific attribute:
-
-```js
-db.products.find({
-  attributes: {
-    $elemMatch: {
-      name: "color",
-      value: "black"
-    }
-  }
-}).limit(10)
-```
-
-Explain:
+Find products with a specific attribute. We use `$elemMatch` when multiple conditions must match the same embedded object inside an array.
 
 ```js
 db.products.find({
@@ -2648,15 +3138,13 @@ db.products.find({
 }).explain("executionStats")
 ```
 
-Reflection:
+### Takeaway
 
-1. Why does Attribute Pattern help with variable product specifications?
-2. What is the trade-off compared to fixed fields like `color`, `storage`, `size`?
-3. Why is `$elemMatch` important here?
+Do not use the Attribute Pattern just because fields are missing sometimes. Use it when the number of possible fields keeps growing and you need a common way to store, query, and index them.
 
 ---
 
-## 11. Bucket Pattern
+## 9. Bucket Pattern
 
 ### Concept
 
@@ -2675,6 +3163,18 @@ Current raw event document:
 db.product_events.findOne()
 ```
 
+In a raw event design, each event is stored as a separate document:
+
+```js
+{
+  productId: "P000100",
+  eventType: "product_view",
+  occurredAt: ISODate("2026-05-01T10:15:00Z")
+}
+```
+
+This is simple, but for high-volume event data, it can create a very large number of small documents.
+
 Possible bucketed design:
 
 ```js
@@ -2683,13 +3183,31 @@ Possible bucketed design:
   bucketDate: ISODate("2026-05-01"),
   eventCount: 120,
   events: [
-    { eventType: "product_view", occurredAt: ISODate("...") },
-    { eventType: "add_to_cart", occurredAt: ISODate("...") }
+    { eventType: "product_view", occurredAt: ISODate("2026-05-01T10:15:00Z") },
+    { eventType: "add_to_cart", occurredAt: ISODate("2026-05-01T10:18:00Z") }
   ]
 }
 ```
 
-### Exercise 20: Understand Event Volume
+In this design, events are grouped by `productId` and `bucketDate`.
+
+Instead of storing 120 separate event documents for product `P000100` on `2026-05-01`, we store one bucket document containing 120 events.
+
+This can reduce document count and make queries more efficient when the common access pattern is:
+
+```js
+// Get all events for a product on a given day
+db.product_event_buckets.findOne({
+  productId: "P000100",
+  bucketDate: ISODate("2026-05-01")
+})
+```
+
+__The bucket should remain bounded__. For example, bucket by day, hour, or fixed event count depending on event volume.
+
+__The goal is not to create one huge document forever, but to group related events into reasonably sized documents.__
+
+### Exercise 17: Understand Event Volume
 
 Find high-volume products:
 
@@ -2720,23 +3238,114 @@ db.product_events.aggregate([
 ])
 ```
 
+Find event volume by date and productId. Sort by count.
+
+```js
+db.product_events.aggregate([
+  {
+    $group: {
+      _id: {
+        productId: "$productId",
+        year: { $year: "$occurredAt" },
+        month: { $month: "$occurredAt" },
+        day: { $dayOfMonth: "$occurredAt" }
+      },
+      count: { $sum: 1 }
+    }
+  },
+  { $sort: { "count": -1 } },
+  { $limit: 10 }
+])
+```
+
 Reflection:
 
 1. Why might raw event documents become expensive at large scale?
 2. When would bucketed documents help?
 3. What should define a bucket: product, time, session, or something else?
 
+Raw event documents can become expensive because every event is stored as a separate document.
+
+If a product gets millions of views, clicks, cart additions, and purchases, the collection can grow very quickly.
+
+Problems:
+
+- very large number of documents
+- larger indexes
+- more index maintenance during writes
+- more documents to scan during analytics
+- more storage overhead
+- aggregation queries ("group by") can become expensive. For example, this query may need to process many documents:
+
+```js
+db.product_events.aggregate([
+  { $group: { _id: "$productId", eventCount: { $sum: 1 } } }
+])
+```
+
+Bucketed documents help when events are frequently queried together For example, if the common query is:
+
+```js
+// Get all events for one product on one day
+db.product_event_buckets.findOne({
+  productId: "P000100",
+  bucketDate: ISODate("2026-05-01")
+})
+```
+
+then storing those events together makes sense.
+
+Bucketed documents are useful when:
+
+- events are high volume
+- events are mostly read by time range
+- events are often grouped by product, user, device, session, or date
+- detailed individual event updates are rare
+- the bucket size can be bounded
+
+The bucket should be defined by the main query pattern.
+
+For product activity analytics, this is a good bucket key:
+
+```js
+{
+  productId: "P000100",
+  bucketDate: ISODate("2026-05-01")
+}
+```
+
+Other possible bucket choices:
+
+```text
+product + day     → product analytics
+user + day        → user activity history
+sessionId         → session replay / session analysis
+deviceId + hour   → IoT or sensor readings
+category + day    → category-level analytics
+```
+
+Choose a bucket size based on volume:
+
+```text
+Low event volume     → product + day
+High event volume    → product + hour
+Very high volume     → product + hour + eventType
+Session-based data   → sessionId
+```
+
+### Takeaway
+
+Choose the bucket based on how the application reads the data. Keep each bucket bounded.
+
 ---
 
-## 12. Subset Pattern
+## 10. Subset Pattern
 
 ### Concept
 
 The Subset Pattern stores frequently needed child data with the parent, while keeping the full data separately.
 
-Example:
-
-A product page may need only the latest 3 reviews, not all reviews.
+Example: a product page may need only the latest 3 reviews, not all reviews - _we have covered this example earlier as a possible optimization in the unbounded arrays section_.
 
 Possible product document:
 
@@ -2755,34 +3364,28 @@ Possible product document:
 
 Full reviews remain in `reviews`.
 
-### Exercise 21: Build a Review Subset
+### Takeaway
 
-Find latest 3 approved reviews for a product:
+Subset Pattern improves read performance, but increases write/update complexity.
 
-```js
-db.reviews.find(
-  { productId: "P000100", status: "approved" },
-  { _id: 0, rating: 1, title: 1, createdAt: 1 }
-).sort({ createdAt: -1 }).limit(3)
+The same review data now exists in two places:
+
+```text
+reviews collection
+products.recentReviews
 ```
 
-Reflection:
-
-1. Why might this subset be embedded in the product document?
-2. Why should all reviews still remain in the `reviews` collection?
-3. What update complexity does this introduce?
+So updates must keep them consistent.
 
 ---
 
-## 13. Outlier Pattern
+## 11. Outlier Pattern
 
 ### Concept
 
 The Outlier Pattern handles exceptional cases separately, so the common case stays simple and fast.
 
-Example:
-
-Most products may have a manageable number of events or reviews. A few viral products may have extremely high activity.
+Example: most products may have a manageable number of events or reviews. A few viral products may have extremely high activity.
 
 Instead of designing every product for the extreme case, handle outliers separately.
 
@@ -2803,7 +3406,7 @@ Possible design:
 }
 ```
 
-### Exercise 22: Identify Outliers
+### Exercise 18: Identify Outliers
 
 Find products with unusually high review counts:
 
@@ -2831,32 +3434,68 @@ Reflection:
 2. Why should outliers not dictate the entire schema?
 3. How can outliers be handled separately?
 
+### Query logic for normal and outlier products
+
+Outliers can be handled with service-level logic. This example is for product reviews, but similar logic can apply to events or other data.
+
+```js
+const product = db.products.findOne({ productId: "P000100" })
+
+// not an outlier - has embedded reviews
+if (!product.hasReviewOutlier) {
+  return db.reviews.find({
+    productId: product.productId,
+    status: "approved"
+  }).sort({ createdAt: -1 }).limit(10)
+}
+
+// is an outlier - fetch reviews metadata from outliers collection (`reviewCount`, `averageRating`)...
+const outlier = db.product_review_outliers.findOne({
+  productId: product.productId
+})
+
+// ...then fetch latest reviews from archive collection using the reference in outlier document
+return db.reviews_archive.find({
+  productId: product.productId,
+  status: "approved"
+}).sort({ createdAt: -1 }).limit(10)
+```
+
+### Takeaway
+
+Outliers should not dictate the schema for normal documents. Keep the common case simple, and route exceptional cases through separate storage or logic.
+
 ---
 
-## 14. Using Projections Effectively
+## 12. Using Projections Effectively
 
 ### Concept
 
 Projection is a schema and query design tool.
 
-Even if a document contains many fields, not every query needs all fields.
+Even if a document contains many fields, not every query needs all fields. 
 
-Example:
+_Example_: Fields not required for the listing page should be excluded. For example, a product listing page may not need
 
-```js
-db.products.find(
-  { category: "electronics" },
-  { _id: 0, productId: 1, name: 1, salePrice: 1, rating: 1 }
-).limit(20)
+```text
+full description
+long specifications
+all product images
+reviews
+questions and answers
+supplier details
+inventory history
+audit fields
+large attributes
+product events
 ```
 
-### Exercise 23: Product Listing Projection
+__Large fields should be avoided because a listing page returns many products at once__.
 
-For a product listing page, run:
+A projection keeps the result small (along with a limit) and avoids sending large fields over the network, and avoids reading large fields from disk or memory.
 
 ```js
-db.products.find(
-  { category: "electronics", status: "active" },
+[
   {
     _id: 0,
     productId: 1,
@@ -2865,19 +3504,18 @@ db.products.find(
     rating: 1,
     reviewCount: 1,
     "stock.status": 1
-  }
-).sort({ salePrice: 1 }).limit(20)
+  },
+  ...more products...
+]
 ```
 
-Reflection:
+### Takeaway
 
-1. Which fields are needed for a listing page?
-2. Which fields are not needed?
-3. Why should large fields be avoided in list views?
+List views should fetch only summary fields. Detail pages can fetch larger fields when needed.
 
 ---
 
-## 15. Designing for Sharding
+## 13. Designing for Sharding
 
 ### Concept
 
@@ -2901,7 +3539,7 @@ Possible shard key discussion examples:
 | `support_tickets` | `department` | Low cardinality, poor distribution |
 | `users` | `userId` | High cardinality |
 
-### Exercise 24: Evaluate Shard Key Candidates
+### Exercise 19: Evaluate Shard Key Candidates
 
 For each field, discuss whether it has high or low cardinality.
 
@@ -2921,9 +3559,15 @@ Reflection:
 3. Why is low cardinality dangerous for sharding?
 4. Why should shard key choice depend on query patterns?
 
+### Takeaway
+
+Shard key choice is both
+  - a data-distribution decision, and
+  - a query-routing decision.
+
 ---
 
-## 16. Schema Versioning
+## 14. Schema Versioning
 
 ### Concept
 
@@ -2949,7 +3593,7 @@ Possible approaches:
 | Update documents when read/written | Lazy migration |
 | Support multiple versions in application code | Backward compatibility |
 
-### Exercise 25: Add Schema Version to Sample Documents
+### Exercise 20: Add Schema Version to Sample Documents
 
 Do not update all documents yet. First inspect:
 
@@ -2983,7 +3627,7 @@ Reflection:
 
 ---
 
-## 17. Schema Anti-patterns
+## 15. Schema Anti-patterns
 
 ### Common Anti-patterns
 
@@ -2997,53 +3641,24 @@ Reflection:
 | Creating very large documents | More memory, network, and update cost |
 | Poor shard key choice | Uneven distribution and hotspots |
 
-### Exercise 26: Diagnose Schema Problems
+## Final Session Takeaway
 
-Review these designs and identify the problem.
+A scalable MongoDB schema is workload-driven:
 
-#### Design A
-
-```js
-{
-  productId: "P000100",
-  reviews: [ /* all reviews forever */ ]
-}
+```text
+Start with query patterns.
+Embed bounded data read with the parent.
+Reference data that grows, changes often, or is queried independently.
+Duplicate only when it improves reads or preserves historical snapshots.
+Use schema patterns to handle variability, high-volume events, common subsets, and outliers.
+Use projections, shard keys, and schema versioning deliberately.
 ```
-
-#### Design B
-
-```js
-{
-  orderId: "O0001000",
-  itemIds: ["OI1", "OI2", "OI3"]
-}
-```
-
-Each item must be fetched separately from another collection.
-
-#### Design C
-
-```js
-{
-  ticketId: "T0001000",
-  department: "orders"
-}
-```
-
-Shard key chosen: `{ department: 1 }`
-
-Reflection:
-
-1. What is wrong with Design A?
-2. What is wrong with Design B?
-3. What is wrong with Design C?
-4. How would you redesign each one?
 
 ---
 
 ## Session 2 End-of-Session Lab: Design a Short Application Schema
 
-**Time:** 20 minutes  
+**Time:** 20 minutes (Covered only if time permits)
 **Goal:** Design a MongoDB schema from application requirements using the patterns learned in this session.
 
 ### Application: Online Learning Platform
@@ -3053,7 +3668,7 @@ The application supports online courses and live workshops. Users can browse cou
 Main requirements:
 
 1. Users browse active courses by `category`, `level`, `price`, and `rating`.
-2. A course detail page shows course information, instructor summary, modules, rating summary, and latest 3 approved reviews.
+2. A course detail page showsSe course information, instructor summary, modules, rating summary, and latest 3 approved reviews.
 3. A user profile page shows the user and their latest enrollments.
 4. Enrollment history must preserve the course title and price at the time of enrollment.
 5. Reviews can grow to thousands per popular course.
@@ -3144,73 +3759,73 @@ A good MongoDB schema is not just a set of collections. It is a design based on 
 
 ### Q1. Before designing MongoDB collections, what should you identify first?
 
-A. Application query patterns
-B. Alphabetical field order
-C. Number of developers
-D. UI color theme
+- A. Application query patterns
+- B. Alphabetical field order
+- C. Number of developers
+- D. UI color theme
 
 ### Q2. A small user preferences object is always displayed with the user profile and updated with the user. Which design is generally suitable?
 
-A. Store preferences in millions of separate collections
-B. Use a text index for preferences
-C. Embed preferences inside the user document
-D. Store preferences only in application memory
+- A. Store preferences in millions of separate collections
+- B. Use a text index for preferences
+- C. Embed preferences inside the user document
+- D. Store preferences only in application memory
 
 ### Q3. A news article can receive thousands of comments over time. Which design is usually safer?
 
-A. Embed all comments forever in the article document
-B. Store comments in the article title field
-C. Use one collection per comment
-D. Store comments in a separate collection with article references
+- A. Embed all comments forever in the article document
+- B. Store comments in the article title field
+- C. Use one collection per comment
+- D. Store comments in a separate collection with article references
 
 ### Q4. A customer can place many orders. Orders are queried independently and may grow over time. Which relationship modeling choice is generally better?
 
-A. Embed all orders forever inside customer
-B. Store orders separately with customer reference
-C. Store customers inside every order item only
-D. Avoid storing customer identity
+- A. Embed all orders forever inside customer
+- B. Store orders separately with customer reference
+- C. Store customers inside every order item only
+- D. Avoid storing customer identity
 
 ### Q5. An order stores the product name and price at purchase time. Why can this be useful?
 
-A. It prevents all future product updates
-B. It removes the need for indexes
-C. It preserves historical order details
-D. It guarantees product stock availability
+- A. It prevents all future product updates
+- B. It removes the need for indexes
+- C. It preserves historical order details
+- D. It guarantees product stock availability
 
 ### Q6. Which design is most likely to cause document growth problems?
 
-A. Embedding all user activity events forever
-B. Embedding one small address object
-C. Storing a fixed settings object
-D. Keeping a small status field
+- A. Embedding all user activity events forever
+- B. Embedding one small address object
+- C. Storing a fixed settings object
+- D. Keeping a small status field
 
 ### Q7. Products in different categories have different specifications. Which pattern helps model variable attributes consistently?
 
-A. Outlier Pattern
-B. Bucket Pattern
-C. Schema Versioning Pattern
-D. Attribute Pattern
+- A. Outlier Pattern
+- B. Bucket Pattern
+- C. Schema Versioning Pattern
+- D. Attribute Pattern
 
 ### Q8. A system records millions of temperature readings per device per day. Which pattern can group readings into bounded documents?
 
-A. Unique Index Pattern
-B. Bucket Pattern
-C. Text Search Pattern
-D. Over-normalization Pattern
+- A. Unique Index Pattern
+- B. Bucket Pattern
+- C. Text Search Pattern
+- D. Over-normalization Pattern
 
 ### Q9. A product page usually shows only the latest three reviews, while all reviews remain queryable separately. Which pattern fits this design?
 
-A. Subset Pattern
-B. Hashed Pattern
-C. Parallel Array Pattern
-D. Sparse Document Pattern
+- A. Subset Pattern
+- B. Hashed Pattern
+- C. Parallel Array Pattern
+- D. Sparse Document Pattern
 
 ### Q10. Which field is usually a poor shard key candidate?
 
-A. A high-cardinality user identifier
-B. A low-cardinality field like department
-C. A frequently queried customer identifier
-D. A well-distributed event identifier
+- A. A high-cardinality user identifier
+- B. A low-cardinality field like department
+- C. A frequently queried customer identifier
+- D. A well-distributed event identifier
 
 ---
 
